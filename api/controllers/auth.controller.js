@@ -1,9 +1,29 @@
 import User from "../models/user.model.js"
 import bcryptjs from "bcryptjs"
 import { errorHandler } from "../utils/error.js"
-import jwt from "jsonwebtoken"
 import crypto from "crypto"
 import { sendPasswordResetEmail, sendPasswordResetConfirmation } from "../services/email.service.js"
+import { generateAccessToken, generateRefreshToken, getRefreshTokenExpiry } from "../utils/tokenUtils.js"
+
+// Helper function to set tokens in cookies
+const setTokenCookies = (res, accessToken, refreshToken) => {
+  const accessTokenExpiry = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+  const refreshTokenExpiry = getRefreshTokenExpiry() // 7 days
+
+  res.cookie("access_token", accessToken, {
+    httpOnly: true,
+    expires: accessTokenExpiry,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  })
+
+  res.cookie("refresh_token", refreshToken, {
+    httpOnly: true,
+    expires: refreshTokenExpiry,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  })
+}
 
 export const signup = async (req, res, next) => {
   const { username, email, password } = req.body
@@ -22,12 +42,25 @@ export const signin = async (req, res, next) => {
   try {
     const validUser = await User.findOne({ email })
     if (!validUser) return next(errorHandler(404, "Usuario no encontrado"))
+
     const validPassword = bcryptjs.compareSync(password, validUser.password)
     if (!validPassword) return next(errorHandler(401, "Contraseña incorrecta"))
-    const token = jwt.sign({ id: validUser._id }, process.env.JWT_SECRET)
-    const { password: hashedPassword, ...rest } = validUser._doc
-    const expiryDate = new Date(Date.now() + 3600000) // 1 hour
-    res.cookie("access_token", token, { httpOnly: true, expires: expiryDate }).status(200).json(rest)
+
+    // Generate tokens
+    const accessToken = generateAccessToken(validUser._id)
+    const refreshToken = generateRefreshToken()
+    const refreshTokenExpiry = getRefreshTokenExpiry()
+
+    // Save refresh token to database
+    validUser.refreshToken = refreshToken
+    validUser.refreshTokenExpires = refreshTokenExpiry
+    await validUser.save()
+
+    // Set cookies
+    setTokenCookies(res, accessToken, refreshToken)
+
+    const { password: hashedPassword, refreshToken: dbRefreshToken, ...rest } = validUser._doc
+    res.status(200).json(rest)
   } catch (error) {
     next(error)
   }
@@ -37,16 +70,21 @@ export const google = async (req, res, next) => {
   try {
     const user = await User.findOne({ email: req.body.email })
     if (user) {
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET)
-      const { password: hashedPassword, ...rest } = user._doc
-      const expiryDate = new Date(Date.now() + 3600000) // 1 hour
-      res
-        .cookie("access_token", token, {
-          httpOnly: true,
-          expires: expiryDate,
-        })
-        .status(200)
-        .json(rest)
+      // Generate tokens
+      const accessToken = generateAccessToken(user._id)
+      const refreshToken = generateRefreshToken()
+      const refreshTokenExpiry = getRefreshTokenExpiry()
+
+      // Save refresh token to database
+      user.refreshToken = refreshToken
+      user.refreshTokenExpires = refreshTokenExpiry
+      await user.save()
+
+      // Set cookies
+      setTokenCookies(res, accessToken, refreshToken)
+
+      const { password: hashedPassword, refreshToken: dbRefreshToken, ...rest } = user._doc
+      res.status(200).json(rest)
     } else {
       const generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8)
       const hashedPassword = bcryptjs.hashSync(generatedPassword, 10)
@@ -57,24 +95,93 @@ export const google = async (req, res, next) => {
         profilePicture: req.body.photo,
       })
       await newUser.save()
-      const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET)
-      const { password: hashedPassword2, ...rest } = newUser._doc
-      const expiryDate = new Date(Date.now() + 3600000) // 1 hour
-      res
-        .cookie("access_token", token, {
-          httpOnly: true,
-          expires: expiryDate,
-        })
-        .status(200)
-        .json(rest)
+
+      // Generate tokens
+      const accessToken = generateAccessToken(newUser._id)
+      const refreshToken = generateRefreshToken()
+      const refreshTokenExpiry = getRefreshTokenExpiry()
+
+      // Save refresh token to database
+      newUser.refreshToken = refreshToken
+      newUser.refreshTokenExpires = refreshTokenExpiry
+      await newUser.save()
+
+      // Set cookies
+      setTokenCookies(res, accessToken, refreshToken)
+
+      const { password: hashedPassword2, refreshToken: dbRefreshToken, ...rest } = newUser._doc
+      res.status(200).json(rest)
     }
   } catch (error) {
     next(error)
   }
 }
 
-export const signout = (req, res) => {
-  res.clearCookie("access_token").status(200).json("Signout success!")
+// Refresh token endpoint
+export const refreshToken = async (req, res, next) => {
+  try {
+    const { refresh_token } = req.cookies
+
+    if (!refresh_token) {
+      return next(errorHandler(401, "Refresh token required"))
+    }
+
+    // Find user with this refresh token
+    const user = await User.findOne({
+      refreshToken: refresh_token,
+      refreshTokenExpires: { $gt: Date.now() },
+    })
+
+    if (!user) {
+      return next(errorHandler(401, "Invalid or expired refresh token"))
+    }
+
+    // Generate new tokens
+    const newAccessToken = generateAccessToken(user._id)
+    const newRefreshToken = generateRefreshToken()
+    const refreshTokenExpiry = getRefreshTokenExpiry()
+
+    // Update refresh token in database
+    user.refreshToken = newRefreshToken
+    user.refreshTokenExpires = refreshTokenExpiry
+    await user.save()
+
+    // Set new cookies
+    setTokenCookies(res, newAccessToken, newRefreshToken)
+
+    res.status(200).json({
+      message: "Tokens refreshed successfully",
+      accessToken: newAccessToken,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const signout = async (req, res, next) => {
+  try {
+    const { refresh_token } = req.cookies
+
+    // Remove refresh token from database if it exists
+    if (refresh_token) {
+      await User.findOneAndUpdate(
+        { refreshToken: refresh_token },
+        {
+          $unset: {
+            refreshToken: 1,
+            refreshTokenExpires: 1,
+          },
+        },
+      )
+    }
+
+    // Clear cookies
+    res.clearCookie("access_token")
+    res.clearCookie("refresh_token")
+    res.status(200).json("Signout success!")
+  } catch (error) {
+    next(error)
+  }
 }
 
 // Request password reset

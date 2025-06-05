@@ -1,5 +1,4 @@
-// Updated user.model.js - Add these fields to your existing schema
-import mongoose from 'mongoose';
+import mongoose from "mongoose"
 
 const userSchema = new mongoose.Schema(
   {
@@ -19,10 +18,9 @@ const userSchema = new mongoose.Schema(
     },
     profilePicture: {
       type: String,
-      default:
-        'https://img.freepik.com/premium-vector/man-avatar-profile-picture-vector-illustration_268834-538.jpg',
+      default: "https://img.freepik.com/premium-vector/man-avatar-profile-picture-vector-illustration_268834-538.jpg",
     },
-    // Add these new fields for password reset
+    // Password reset fields
     resetPasswordToken: {
       type: String,
       default: null,
@@ -31,10 +29,19 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Refresh token fields
+    refreshToken: {
+      type: String,
+      default: null,
+    },
+    refreshTokenExpires: {
+      type: Date,
+      default: null,
+    },
   },
-  { timestamps: true }
-);
+  { timestamps: true },
+)
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema)
 
-export default User;
+export default User

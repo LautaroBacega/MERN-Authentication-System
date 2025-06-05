@@ -8,6 +8,7 @@ import Header from "./components/Header"
 import PrivateRoute from "./components/PrivateRoute"
 import ForgotPassword from "./components/ForgotPassword"
 import ResetPassword from "./components/ResetPassword"
+import SessionExpiredModal from "./components/SessionExpiredModal"
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
         </Route>
       </Routes>
+      <SessionExpiredModal />
     </BrowserRouter>
   )
 }

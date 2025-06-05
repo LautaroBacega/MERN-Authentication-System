@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useEffect, useState } from "react"
+import { apiInterceptor } from "../utils/apiInterceptor"
 
 export const UserContext = createContext()
 
@@ -40,6 +41,7 @@ export const UserContextProvider = ({ children }) => {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify(formData),
       })
       const data = await res.json()
@@ -67,6 +69,7 @@ export const UserContextProvider = ({ children }) => {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify(userData),
       })
       const data = await res.json()
@@ -84,7 +87,7 @@ export const UserContextProvider = ({ children }) => {
   const updateUser = async (userId, formData) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/user/update/${userId}`, {
+      const res = await apiInterceptor.fetchWithAuth(`/api/user/update/${userId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -110,7 +113,7 @@ export const UserContextProvider = ({ children }) => {
   const deleteUser = async (userId) => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/user/delete/${userId}`, {
+      const res = await apiInterceptor.fetchWithAuth(`/api/user/delete/${userId}`, {
         method: "DELETE",
       })
       const data = await res.json()
@@ -132,7 +135,9 @@ export const UserContextProvider = ({ children }) => {
 
   const signOut = async () => {
     try {
-      await fetch("/api/auth/signout")
+      await fetch("/api/auth/signout", {
+        credentials: "include",
+      })
       setCurrentUser(null)
       setIsLoggedIn(false)
     } catch (error) {
