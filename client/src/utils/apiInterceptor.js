@@ -3,6 +3,12 @@ class ApiInterceptor {
   constructor() {
     this.isRefreshing = false
     this.failedQueue = []
+    this.tokenRefreshedCallback = null
+  }
+
+  // Register callback for token refresh
+  onTokenRefreshed(callback) {
+    this.tokenRefreshedCallback = callback
   }
 
   // Process failed queue after refresh
@@ -21,6 +27,7 @@ class ApiInterceptor {
   // Refresh access token
   async refreshToken() {
     try {
+      this.isRefreshing = true
       const response = await fetch("/api/auth/refresh-token", {
         method: "POST",
         credentials: "include",
@@ -28,11 +35,20 @@ class ApiInterceptor {
 
       if (response.ok) {
         const data = await response.json()
+
+        // Notify listeners that token was refreshed
+        if (this.tokenRefreshedCallback) {
+          this.tokenRefreshedCallback()
+        }
+
+        this.isRefreshing = false
         return data.accessToken
       } else {
+        this.isRefreshing = false
         throw new Error("Refresh failed")
       }
     } catch (error) {
+      this.isRefreshing = false
       throw error
     }
   }

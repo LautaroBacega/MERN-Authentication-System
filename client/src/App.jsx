@@ -9,6 +9,7 @@ import PrivateRoute from "./components/PrivateRoute"
 import ForgotPassword from "./components/ForgotPassword"
 import ResetPassword from "./components/ResetPassword"
 import SessionExpiredModal from "./components/SessionExpiredModal"
+import TokenTimers from "./components/TokenTimers"
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         </Route>
       </Routes>
       <SessionExpiredModal />
+      <TokenTimers />
     </BrowserRouter>
   )
 }

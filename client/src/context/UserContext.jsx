@@ -9,6 +9,7 @@ export const UserContextProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null)
   const [loading, setLoading] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [tokenRefreshEvent, setTokenRefreshEvent] = useState(0)
 
   // Load user from localStorage on app start
   useEffect(() => {
@@ -22,6 +23,14 @@ export const UserContextProvider = ({ children }) => {
         localStorage.removeItem("currentUser")
       }
     }
+  }, [])
+
+  // Register token refresh callback
+  useEffect(() => {
+    apiInterceptor.onTokenRefreshed(() => {
+      // Trigger a state update to notify components
+      setTokenRefreshEvent((prev) => prev + 1)
+    })
   }, [])
 
   // Save user to localStorage whenever currentUser changes
@@ -54,6 +63,10 @@ export const UserContextProvider = ({ children }) => {
       setCurrentUser(data)
       setIsLoggedIn(true)
       setLoading(false)
+
+      // Trigger token refresh event to reset timer
+      setTokenRefreshEvent((prev) => prev + 1)
+
       return { success: true, data }
     } catch (error) {
       setLoading(false)
@@ -77,6 +90,10 @@ export const UserContextProvider = ({ children }) => {
       setCurrentUser(data)
       setIsLoggedIn(true)
       setLoading(false)
+
+      // Trigger token refresh event to reset timer
+      setTokenRefreshEvent((prev) => prev + 1)
+
       return { success: true, data }
     } catch (error) {
       setLoading(false)
@@ -152,6 +169,7 @@ export const UserContextProvider = ({ children }) => {
     currentUser,
     loading,
     isLoggedIn,
+    tokenRefreshEvent,
     signIn,
     signInWithGoogle,
     updateUser,
